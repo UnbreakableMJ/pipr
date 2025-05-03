@@ -1,8 +1,8 @@
 [package]
 name = "pipr"
-version = "0.0.16"
-authors = ["Leon Kowarschick"]
-edition = "2018"
+version = "0.1.0"
+authors = ["ElKowar <dev@elkowar.dev>"]
+edition = "2024"
 license = "MIT"
 publish = true
 repository = "https://github.com/Elkowar/pipr"
