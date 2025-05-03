@@ -1,12 +1,13 @@
-use crate::lineeditor::{ EditorEvent, convert_keyevent_to_editorevent };
+use crate::app::key_select_menu::KeySelectMenu;
+use crate::app::{App, CachedCommandPart, KeySelectMenuType};
+use crate::command_evaluation;
+use crate::lineeditor::{convert_keyevent_to_editorevent, EditorEvent};
+use crate::util::{StringExt, VecStringExt};
 use crate::CmdOutput;
 use crate::Stdio;
-use crate::app::key_select_menu::KeySelectMenu;
-use crate::util::{StringExt, VecStringExt};
-use crate::app::app::{App, KeySelectMenuType, CachedCommandPart};
 
-use std::path::Path;
 use crossterm::event::{KeyCode, KeyModifiers};
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -84,10 +85,11 @@ impl App {
             command_to_cache.pop();
         }
 
-        let command_result = self
-            .execution_handler
-            .execution_mode
-            .run_cmd_blocking(&self.execution_handler.eval_environment, &command_to_cache.join(" "));
+        let command_result = command_evaluation::execute_command_blocking(
+            &self.execution_handler.shell_command, 
+            &command_to_cache.join(" "),
+            self.execution_handler.execution_mode
+        );
 
         if self.input_state.cursor_col < self.input_state.current_line().len() {
             match command_result {
@@ -138,11 +140,11 @@ impl App {
         let current_output = self.command_output.to_owned();
         let output_viewers = &self.config.output_viewers;
         let options = output_viewers.iter().map(|(&k, v)| (k, v.to_owned())).collect();
-        let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenOutputIn(current_output.into()));
+        let key_select_menu = KeySelectMenu::new(options, KeySelectMenuType::OpenOutputIn(current_output));
         self.opened_key_select_menu = Some(key_select_menu);
     }
 
-    pub async fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
+    pub fn handle_main_window_tui_event(&mut self, code: KeyCode, modifiers: KeyModifiers) {
         let control_pressed = modifiers.contains(KeyModifiers::CONTROL);
 
         if let Some(autocomplete_state) = self.autocomplete_state.as_mut() {
@@ -195,7 +197,7 @@ impl App {
             }
             KeyCode::Enter if !modifiers.contains(KeyModifiers::ALT) => {
                 self.history.push(self.input_state.content_to_commandentry());
-                self.execute_content().await;
+                self.execute_content();
             }
 
             _ => {
@@ -215,7 +217,7 @@ impl App {
                     }
 
                     if self.autoeval_mode && previous_content != *new_content {
-                        self.execute_content().await;
+                        self.execute_content();
                     }
                 }
             }
@@ -227,13 +229,13 @@ impl App {
         if let Some(idx) = self.history_idx {
             if idx > 0 {
                 self.history_idx = Some(idx - 1);
-                self.input_state.load_commandentry(&self.history.get_at(idx - 1).unwrap());
+                self.input_state.load_commandentry(self.history.get_at(idx - 1).unwrap());
             }
         } else if self.history.len() > 0 {
             let new_idx = self.history.len() - 1;
             self.history_idx = Some(new_idx);
             self.history.push(self.input_state.content_to_commandentry());
-            self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
+            self.input_state.load_commandentry(self.history.get_at(new_idx).unwrap());
         }
     }
 
@@ -243,7 +245,7 @@ impl App {
             let new_idx = idx + 1;
             if new_idx < self.history.len() - 1 {
                 self.history_idx = Some(new_idx);
-                self.input_state.load_commandentry(&self.history.get_at(new_idx).unwrap());
+                self.input_state.load_commandentry(self.history.get_at(new_idx).unwrap());
             } else {
                 self.history_idx = None;
                 self.input_state.set_content(vec![String::new()]);
